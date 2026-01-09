@@ -1,0 +1,30 @@
+/* I2C power supply overlay */
+
+/ {
+	psu_control {
+		compatible = "gpio-keys";
+		pson_l: pson_l {
+			gpios = <&gpioa 15 GPIO_ACTIVE_LOW>;
+			label = "PSON_L";
+		};
+	};
+};
+
+&i2c1 {
+	status = "okay";
+
+	psu_eeprom: eeprom@51 {
+		compatible = "atmel,at24";
+		reg = <0x51>;  /* 0xa2 >> 1 */
+		size = <256>;
+		pagesize = <16>;
+		address-width = <8>;
+		timeout = <5>;
+	};
+
+	psu: power-supply@59 {
+		compatible = "i2c-device";
+		reg = <0x59>;  /* 0xb2 >> 1 - PMBus device */
+		status = "okay";
+	};
+};

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script src="main.js"></script>
+    <title>PSU Controller</title>
+</head>
+<body>
+    <h1>Power Supply Controller</h1>
+
+    <h4>Output Control</h4>
+    <p>Turn the power supply output on or off:</p>
+    <input id="psu_on" type="button" value="Output ON">
+    <input id="psu_off" type="button" value="Output OFF">
+    <p>Status: <span id="psu_status">Unknown</span></p>
+
+    <h4>Telemetry</h4>
+    <table>
+        <tr>
+            <td>Input Voltage</td>
+            <td id="vin">--</td>
+            <td>V</td>
+        </tr>
+        <tr>
+            <td>Output Voltage</td>
+            <td id="vout">--</td>
+            <td>V</td>
+        </tr>
+        <tr>
+            <td>Output Current</td>
+            <td id="iout">--</td>
+            <td>A</td>
+        </tr>
+        <tr>
+            <td>Temperature</td>
+            <td id="temp">--</td>
+            <td>&deg;C</td>
+        </tr>
+        <tr>
+            <td>Fan Speed</td>
+            <td id="fan_rpm">--</td>
+            <td>RPM</td>
+        </tr>
+    </table>
+
+    <h4>Uptime</h4>
+    <p id="uptime"></p>
+</body>
+</html>
