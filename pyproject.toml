@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Control interface for t0-psu boards"
 requires-python = ">=3.12"
 dependencies = [
+    "pip",
     "west",
     "zeroconf",
     "requests",

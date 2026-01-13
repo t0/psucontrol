@@ -53,22 +53,31 @@ reference and may be more convenient elsewhere on the board.
 
 ## How to Build (firmware)
 
-On a Linux box with the ["uv" tool](https://docs.astral.sh/uv/) installed,
+On a Linux box with the ["uv" tool](https://docs.astral.sh/uv/) installed:
 
 ```bash
-$ make setup
+# Install dependencies and the psucontrol CLI tool
+$ uv sync
+
+# Build and flash firmware (requires STLink connected via USB)
+$ uv run psucontrol --flash
 ```
 
-Then,
+The `--flash` command will automatically:
+- Set up the west workspace
+- Export Zephyr environment variables
+- Install required packages
+- Build the firmware
+- Flash to the connected device
+
+Alternatively, you can use west commands directly for more control:
 
 ```bash
-$ make build
-```
+# Just build without flashing
+$ uv run west build -b nucleo_h723zg .
 
-Finally, with the USB cable attached,
-
-```bash
-$ make flash
+# Flash previously built firmware
+$ uv run west flash
 ```
 
 ## Using the PSU Controller
@@ -116,6 +125,9 @@ $ psucontrol 192.168.10.13 --status --json
   "fan_rpm": 2400,
   "output_on": false
 }
+
+# Flash firmware (requires STLink connected via USB)
+$ psucontrol --flash
 ```
 
 ### Web Interface

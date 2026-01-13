@@ -6,6 +6,7 @@ Command-line interface for controlling t0-psu boards
 import argparse
 import contextlib
 import json
+import os
 import requests
 import sys
 import time
@@ -127,6 +128,33 @@ def cmd_status(args):
         return 1
 
 
+def cmd_flash(args):
+    """Flash firmware to PSU controller"""
+    import subprocess
+
+    steps = []
+
+    if not os.path.exists('.west'):
+        steps.append(("Initializing west workspace", ['west', 'init']))
+
+    steps.extend([
+        ("Updating west workspace", ['west', 'update']),
+        ("Exporting Zephyr environment", ['west', 'zephyr-export']),
+        ("Installing packages", ['west', 'packages', 'pip', '--install']),
+        ("Building firmware", ['west', 'build', '-b', 'nucleo_h723zg', '.']),
+        ("Flashing firmware", ['west', 'flash']),
+    ])
+
+    for msg, cmd in steps:
+        print(f"{msg}...")
+        result = subprocess.run([sys.executable, '-m'] + cmd)
+        if result.returncode != 0:
+            print(f"Failed: {msg}", file=sys.stderr)
+            return result.returncode
+
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Command-line interface for controlling t0-psu boards',
@@ -138,6 +166,7 @@ Examples:
   %(prog)s 192.168.10.13 --off
   %(prog)s 192.168.10.13 -s
   %(prog)s http://192.168.10.13 --status --json
+  %(prog)s --flash
         """.strip()
     )
 
@@ -162,11 +191,16 @@ Examples:
         action='store_true',
         help='Get PSU status and telemetry'
     )
+    action.add_argument(
+        '--flash',
+        action='store_true',
+        help='Flash firmware to PSU controller (requires STLink connection)'
+    )
 
     parser.add_argument(
         'target',
         nargs='?',
-        help='PSU target (hostname, IP, or URL) - not needed for --discover'
+        help='PSU target (hostname, IP, or URL) - not needed for --discover or --flash'
     )
 
     parser.add_argument(
@@ -180,6 +214,12 @@ Examples:
         action='store_true',
         help='Output raw JSON instead of formatted text (only for --status)'
     )
+    parser.add_argument(
+        '--build-dir',
+        type=str,
+        default=None,
+        help='Build directory for west flash (only for --flash)'
+    )
 
     args = parser.parse_args()
 
@@ -189,6 +229,10 @@ Examples:
         if args.timeout is None:
             args.timeout = 1
         return cmd_discover(args)
+    elif args.flash:
+        if args.target:
+            parser.error("--flash does not take a target argument")
+        return cmd_flash(args)
     else:
         if not args.target:
             parser.error("target is required for --on, --off, and --status")
