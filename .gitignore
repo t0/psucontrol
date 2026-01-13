@@ -1,2 +1,7 @@
 *.swp
 build/
+.west/
+zephyr/
+bootloader/
+modules/
+tools/
