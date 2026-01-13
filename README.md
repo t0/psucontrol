@@ -92,3 +92,11 @@ $ avahi-browse -rt _t0-psu._tcp
    port = [80]
    txt = []
 ```
+
+## Debugging
+
+If something went wrong, the Zephyr console is generally a good first step. You can access this via
+
+```bash
+$ screen /dev/ttyACM0 115200
+```
