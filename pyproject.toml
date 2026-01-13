@@ -1,0 +1,20 @@
+[project]
+name = "psucontrol"
+version = "0.1.0"
+description = "Control interface for t0-psu boards"
+requires-python = ">=3.12"
+dependencies = [
+    "west",
+    "zeroconf",
+    "requests",
+]
+
+[project.scripts]
+psucontrol = "psucontrol.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["psucontrol"]

@@ -25,6 +25,8 @@
   exercise more than one path. Switches that are stuck in one position are just
   clutter.
 
+- Do not overuse unicode in user-facing messages (e.g. ✓ and ✗)
+
 # Hints
 
 - Zephyr makes use of statically allocated buffers with sizes configured at

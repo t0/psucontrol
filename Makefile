@@ -13,9 +13,7 @@ flash:
 
 setup:
 	uv venv --python=3.12
-	uv pip install pip
-	uv pip install west
-	uv run west init
+	uv sync
 	uv run west update
 	uv run west zephyr-export
 	uv run west packages pip --install

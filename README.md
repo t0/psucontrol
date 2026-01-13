@@ -71,16 +71,59 @@ Finally, with the USB cable attached,
 $ make flash
 ```
 
-## Discovering PSU Hardware
+## Using the PSU Controller
 
-On a network, you can discover PSU hardware as follows:
+### Command-Line Interface
+
+The `psucontrol` command provides a command-line interface for discovering and controlling PSUs:
 
 ```bash
-$ psucontrol/discover.py
-192.168.10.13: http://t0-psu-0280e17fcea7.local:80
+# Discover PSUs on the network
+$ psucontrol -d
+Discovering PSUs (timeout: 1.0s)...
+
+Found 1 PSU(s):
+
+  t0-psu-0280e17fcea7
+    URL:     http://t0-psu-0280e17fcea7.local
+    Address: 192.168.10.13
+
+# Turn PSU output on
+$ psucontrol t0-psu-0280e17fcea7.local --on
+PSU output enabled
+
+# Turn PSU output off
+$ psucontrol 192.168.10.13 --off
+PSU output disabled
+
+# Get PSU status
+$ psucontrol 192.168.10.13 -s
+PSU Status:
+  Output:       OFF
+  Input:        229.50 V
+  Output:       12.08 V @ 0.125 A
+  Power:        1.5 W
+  Temperature:  32.5 °C
+  Fan speed:    2400 RPM
+
+# Get raw JSON output
+$ psucontrol 192.168.10.13 --status --json
+{
+  "vin": 229.50,
+  "vout": 12.08,
+  "iout": 0.125,
+  "temp": 32.5,
+  "fan_rpm": 2400,
+  "output_on": false
+}
 ```
 
-You can then open the URL in your web browser to see the web interface.
+### Web Interface
+
+You can also open the PSU URL in your web browser to see the web interface with real-time telemetry and control.
+
+### Discovery with Avahi
+
 Alternately, you can resolve the service using avahi:
 
 ```bash

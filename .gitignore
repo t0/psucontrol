@@ -5,3 +5,5 @@ zephyr/
 bootloader/
 modules/
 tools/
+uv.lock
+__pycache__
