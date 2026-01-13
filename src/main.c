@@ -72,17 +72,22 @@ static struct http_resource_detail_static main_js_gz_resource_detail = {
 	.static_data_len = sizeof(main_js_gz),
 };
 
-static int uptime_handler(struct http_client_ctx *client, enum http_data_status status,
+static int uptime_handler(struct http_client_ctx *client, enum http_transaction_status status,
 			  const struct http_request_ctx *request_ctx,
 			  struct http_response_ctx *response_ctx, void *user_data)
 {
 	int ret;
 	static uint8_t uptime_buf[64];
 
+	if (status == HTTP_SERVER_TRANSACTION_ABORTED ||
+	    status == HTTP_SERVER_TRANSACTION_COMPLETE) {
+		return 0;
+	}
+
 	/* A payload is not expected with the GET request. Ignore any data and wait until
 	 * final callback before sending response
 	 */
-	if (status == HTTP_SERVER_DATA_FINAL) {
+	if (status == HTTP_SERVER_REQUEST_DATA_FINAL) {
 		int64_t uptime_ms = k_uptime_get();
 		int64_t total_seconds = uptime_ms / 1000;
 		int hours = total_seconds / 3600;
@@ -139,14 +144,15 @@ static void parse_psu_post(uint8_t *buf, size_t len)
 	}
 }
 
-static int psu_control_handler(struct http_client_ctx *client, enum http_data_status status,
+static int psu_control_handler(struct http_client_ctx *client, enum http_transaction_status status,
 		       const struct http_request_ctx *request_ctx,
 		       struct http_response_ctx *response_ctx, void *user_data)
 {
 	static uint8_t post_payload_buf[32];
 	static size_t cursor;
 
-	if (status == HTTP_SERVER_DATA_ABORTED) {
+	if (status == HTTP_SERVER_TRANSACTION_ABORTED ||
+	    status == HTTP_SERVER_TRANSACTION_COMPLETE) {
 		cursor = 0;
 		return 0;
 	}
@@ -163,7 +169,7 @@ static int psu_control_handler(struct http_client_ctx *client, enum http_data_st
 	memcpy(post_payload_buf + cursor, request_ctx->data, request_ctx->data_len);
 	cursor += request_ctx->data_len;
 
-	if (status == HTTP_SERVER_DATA_FINAL) {
+	if (status == HTTP_SERVER_REQUEST_DATA_FINAL) {
 		parse_psu_post(post_payload_buf, cursor);
 		cursor = 0;
 	}
@@ -180,14 +186,19 @@ static struct http_resource_detail_dynamic psu_control_resource_detail = {
 	.user_data = NULL,
 };
 
-static int psu_telemetry_handler(struct http_client_ctx *client, enum http_data_status status,
+static int psu_telemetry_handler(struct http_client_ctx *client, enum http_transaction_status status,
 				 const struct http_request_ctx *request_ctx,
 				 struct http_response_ctx *response_ctx, void *user_data)
 {
 	static char json_buf[256];
 	int ret;
 
-	if (status == HTTP_SERVER_DATA_FINAL) {
+	if (status == HTTP_SERVER_TRANSACTION_ABORTED ||
+	    status == HTTP_SERVER_TRANSACTION_COMPLETE) {
+		return 0;
+	}
+
+	if (status == HTTP_SERVER_REQUEST_DATA_FINAL) {
 		float vin = 0, vout = 0, iout = 0, temp = 0;
 		int fan_rpm = 0;
 		bool output_on = false;
