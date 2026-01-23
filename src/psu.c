@@ -29,8 +29,8 @@ void psu_test(void)
 {
 	/* Initialize PSON_L GPIO */
 	if (gpio_is_ready_dt(&pson_l)) {
-		gpio_pin_configure_dt(&pson_l, GPIO_OUTPUT_INACTIVE);
-		LOG_INF("PSON_L GPIO (PA15) initialized - PSU disabled");
+		gpio_pin_configure_dt(&pson_l, GPIO_OUTPUT_ACTIVE); /* <-- Setting PSON_L to ON on startup!*/
+		LOG_INF("PSON_L GPIO (PA15) initialized - PSU enabled");
 	} else {
 		LOG_ERR("PSON_L GPIO not ready");
 	}

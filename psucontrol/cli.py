@@ -144,12 +144,14 @@ def cmd_flash(args):
         ("Building firmware", ['west', 'build', '-b', 'nucleo_h723zg', '.']),
         ("Flashing firmware", ['west', 'flash']),
     ])
-
+    
     for msg, cmd in steps:
         print(f"{msg}...")
         result = subprocess.run([sys.executable, '-m'] + cmd)
         if result.returncode != 0:
             print(f"Failed: {msg}", file=sys.stderr)
+            if msg == "Building firmware":
+                print(f"For error during 'Building Firmware' --> Note that the working directory is assumed to be the parent `psucontrol` directory.", file=sys.stderr)
             return result.returncode
 
     return 0
