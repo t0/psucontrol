@@ -14,6 +14,8 @@ from typing import Dict, Any
 
 from zeroconf import ServiceBrowser, ServiceListener, Zeroconf
 
+from .api import PSUController
+
 
 class PSUListener(ServiceListener):
     def __init__(self):
@@ -78,83 +80,39 @@ def cmd_discover(args):
     return 0
 
 
+def create_psu_controller(args):
+    """Create PSUController object from args"""
+
+    psu = PSUController(hostname = args.target, timeout = args.timeout)
+
+    return psu
+
+
 def cmd_control(args, state : bool):
     """Turn PSU output on"""
 
-    try:
-        response = requests.post(
-            f"http://{args.target}/psu-control",
-            json={"output_state": state},
-            headers={"Content-Type": "application/json"},
-            timeout=args.timeout
-        )
-        response.raise_for_status()
-        print(f"PSU output {'enabled' if state else 'disabled'}")
-        return 0
-    except requests.exceptions.RequestException as e:
-        print(f"Failed to control PSU: {e}", file=sys.stderr)
-        return 1
+    psu = create_psu_controller(args)
+    err = psu.control_power(state = state) # set state, return error code
+
+    return err
 
 
 def cmd_status(args):
     """Get PSU status and telemetry"""
 
-    try:
-        response = requests.get(
-            f"http://{args.target}/psu",
-            timeout=args.timeout)
-        response.raise_for_status()
-        data = response.json()
+    psu = create_psu_controller(args)
+    err = psu.status(json_output = args.json) # get status, return error code
 
-        if args.json:
-            print(json.dumps(data, indent=2))
-        else:
-            vout = data.get('vout', 0)
-            iout = data.get('iout', 0)
-
-            print(f"PSU Status:")
-            print(f"  Output:       {'ON' if data.get('output_on') else 'OFF'}")
-            print(f"  Input:        {data.get('vin', 0):.2f} V")
-            print(f"  Output:       {vout:.2f} V @ {iout:.3f} A ({iout*vout:.1f} W)")
-            print(f"  Temperature:  {data.get('temp', 0):.1f} °C")
-            print(f"  Fan speed:    {data.get('fan_rpm', 0)} RPM")
-
-        return 0
-    except requests.exceptions.RequestException as e:
-        print(f"Failed to get PSU status: {e}", file=sys.stderr)
-        return 1
-    except (json.JSONDecodeError, KeyError) as e:
-        print(f"Failed to parse PSU response: {e}", file=sys.stderr)
-        return 1
+    return err
 
 
 def cmd_flash(args):
     """Flash firmware to PSU controller"""
-    import subprocess
-
-    steps = []
-
-    if not os.path.exists('.west'):
-        steps.append(("Initializing west workspace", ['west', 'init']))
-
-    steps.extend([
-        ("Updating west workspace", ['west', 'update']),
-        ("Exporting Zephyr environment", ['west', 'zephyr-export']),
-        ("Installing packages", ['west', 'packages', 'pip', '--install']),
-        ("Building firmware", ['west', 'build', '-b', 'nucleo_h723zg', '.']),
-        ("Flashing firmware", ['west', 'flash']),
-    ])
     
-    for msg, cmd in steps:
-        print(f"{msg}...")
-        result = subprocess.run([sys.executable, '-m'] + cmd)
-        if result.returncode != 0:
-            print(f"Failed: {msg}", file=sys.stderr)
-            if msg == "Building firmware":
-                print(f"For error during 'Building Firmware' --> Note that the working directory is assumed to be the parent `psucontrol` directory.", file=sys.stderr)
-            return result.returncode
+    psu = create_psu_controller(args)
+    err = psu.flash() # flash PSU, return error code
 
-    return 0
+    return err
 
 
 def main():
