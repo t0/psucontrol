@@ -27,6 +27,7 @@ and format.
 #### TET2200
 
 - Connect PWR Return (P13-24 on either row) to the signal GND (P29).
+- Add 4.7kOhm pull-down resistor from A29 to B29 (originally just a wire shorting the pins)
 
 #### TET2200 to Nucleo
 
@@ -44,12 +45,15 @@ Connect the TET2200 to the Nucleo as follows:
   LDO has just become a heater (it's a good thing the Nucleo doesn't consume
   much power.)
 - Add a 4.7kOhm pull-up resistor from SDA to VREFP. The SDA pin is available at
-  pin 3 of CN12 as a through-hole pad.
+  pin 3 of CN12 as a through-hole pad*.
 - Add a 4.7kOhm pull-up resistor from SCL to VREFP. The SCL pin is available at
-  pin 5 of CN12 as a through-hole pad.
+  pin 5 of CN12 as a through-hole pad*.
+- Move black reset wire to CN8 GND pin.**
+- Move white reset wire to CN8 NRST pin.**
 
-For the last two, VREFP is available on pin 6 of CN7. VREFP is just a 3.3V
+*VREFP is available on pin 6 of CN7. VREFP is just a 3.3V
 reference and may be more convenient elsewhere on the board.
+**These changes allow user to reboot the Nucleo without interrupting the PSU.
 
 ## How to Build (firmware)
 
