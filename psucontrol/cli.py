@@ -14,6 +14,8 @@ from typing import Dict, Any
 
 from zeroconf import ServiceBrowser, ServiceListener, Zeroconf
 
+from .api import PSUController
+
 
 class PSUListener(ServiceListener):
     def __init__(self):
@@ -76,56 +78,6 @@ def cmd_discover(args):
         print()
 
     return 0
-
-
-def cmd_control(args, state : bool):
-    """Turn PSU output on"""
-
-    try:
-        response = requests.post(
-            f"http://{args.target}/psu-control",
-            json={"output_state": state},
-            headers={"Content-Type": "application/json"},
-            timeout=args.timeout
-        )
-        response.raise_for_status()
-        print(f"PSU output {'enabled' if state else 'disabled'}")
-        return 0
-    except requests.exceptions.RequestException as e:
-        print(f"Failed to control PSU: {e}", file=sys.stderr)
-        return 1
-
-
-def cmd_status(args):
-    """Get PSU status and telemetry"""
-
-    try:
-        response = requests.get(
-            f"http://{args.target}/psu",
-            timeout=args.timeout)
-        response.raise_for_status()
-        data = response.json()
-
-        if args.json:
-            print(json.dumps(data, indent=2))
-        else:
-            vout = data.get('vout', 0)
-            iout = data.get('iout', 0)
-
-            print(f"PSU Status:")
-            print(f"  Output:       {'ON' if data.get('output_on') else 'OFF'}")
-            print(f"  Input:        {data.get('vin', 0):.2f} V")
-            print(f"  Output:       {vout:.2f} V @ {iout:.3f} A ({iout*vout:.1f} W)")
-            print(f"  Temperature:  {data.get('temp', 0):.1f} °C")
-            print(f"  Fan speed:    {data.get('fan_rpm', 0)} RPM")
-
-        return 0
-    except requests.exceptions.RequestException as e:
-        print(f"Failed to get PSU status: {e}", file=sys.stderr)
-        return 1
-    except (json.JSONDecodeError, KeyError) as e:
-        print(f"Failed to parse PSU response: {e}", file=sys.stderr)
-        return 1
 
 
 def cmd_flash(args):
@@ -241,12 +193,44 @@ Examples:
         if args.timeout is None:
             args.timeout = 5.0
 
+        psu = PSUController(hostname = args.target, timeout = args.timeout)
+
         if args.on:
-            return cmd_control(args, True)
+            try:
+                psu.control_power(state = True)
+                print("PSU output enabled")
+                return 0
+            except requests.exceptions.RequestException as e:
+                print(f"Failed to control PSU: {e}", file=sys.stderr)
+                return 1
         elif args.off:
-            return cmd_control(args, False)
+            try:
+                psu.control_power(state = False)
+                print("PSU output disabled")
+                return 0
+            except requests.exceptions.RequestException as e:
+                print(f"Failed to control PSU: {e}", file=sys.stderr)
+                return 1
         elif args.status:
-            return cmd_status(args)
+            try:
+                if args.json:
+                    data = psu.status(json_output = True)
+                else:
+                    data = psu.status(json_output = False)
+
+                    vout = data.get('vout', 0)
+                    iout = data.get('iout', 0)
+
+                    print(f"PSU Status:")
+                    print(f"  Output:       {'ON' if data.get('output_on') else 'OFF'}")
+                    print(f"  Input:        {data.get('vin', 0):.2f} V")
+                    print(f"  Output:       {vout:.2f} V @ {iout:.3f} A ({iout*vout:.1f} W)")
+                    print(f"  Temperature:  {data.get('temp', 0):.1f} °C")
+                    print(f"  Fan speed:    {data.get('fan_rpm', 0)} RPM")
+                return 0
+            except requests.exceptions.RequestException as e:
+                print(f"Failed to control PSU: {e}", file=sys.stderr)
+                return 1
 
     return 1
 
