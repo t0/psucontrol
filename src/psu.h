@@ -22,8 +22,13 @@ int psu_eeprom_read(uint32_t offset, uint8_t *data, size_t len);
 int psu_get_voltage_in(float *volts);      /* READ_VIN */
 int psu_get_voltage_out(float *volts);     /* READ_VOUT */
 int psu_get_current_out(float *amps);      /* READ_IOUT */
-int psu_get_temperature(float *celsius);   /* READ_TEMPERATURE_1 */
+int psu_get_temp_inlet(float *celsius);    /* READ_TEMPERATURE_1 */
+int psu_get_temp_oring(float *celsius);    /* READ_TEMPERATURE_2 */
+int psu_get_temp_outlet(float *celsius);   /* READ_TEMPERATURE_3 */
 int psu_get_fan_speed(int *rpm);           /* READ_FAN_SPEED_1 */
+
+/* Fault function */
+int psu_get_faults(char *buf, size_t buflen);
 
 /* PSU control */
 int psu_set_output(bool enable);                /* OPERATION register */

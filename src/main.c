@@ -208,20 +208,29 @@ static int psu_telemetry_handler(struct http_client_ctx *client, enum http_trans
 		ret_vin = psu_get_voltage_in(&vin);
 		ret_vout = psu_get_voltage_out(&vout);
 		ret_iout = psu_get_current_out(&iout);
-		ret_temp = psu_get_temperature(&temp);
+		ret_temp = psu_get_temp_inlet(&temp); // can add other sensors too if desired
 		ret_fan = psu_get_fan_speed(&fan_rpm);
 		psu_get_output_status(&output_on);
+
+		char fault_buf[256];
+		psu_get_faults(fault_buf, sizeof(fault_buf));
+
+		// test buffer
+		// snprintf(fault_buf, sizeof(fault_buf), "\"TESTING\"");
 
 		/* Format as JSON - use integer formatting to avoid float printf */
 		ret = snprintf(json_buf, sizeof(json_buf),
 			       "{\"vin\":%d.%02d,\"vout\":%d.%02d,\"iout\":%d.%03d,"
-			       "\"temp\":%d.%d,\"fan_rpm\":%d,\"output_on\":%s}",
+			       "\"temp\":%d.%d,\"fan_rpm\":%d,\"output_on\":%s,"
+				   "\"faults\":[%s]}",
 			       (int)vin, (int)(vin * 100) % 100,
 			       (int)vout, (int)(vout * 100) % 100,
 			       (int)iout, (int)(iout * 1000) % 1000,
 			       (int)temp, (int)(temp * 10) % 10,
 			       fan_rpm,
-			       output_on ? "true" : "false");
+			       output_on ? "true" : "false",
+				   fault_buf
+				);
 
 		if (ret < 0 || ret >= sizeof(json_buf)) {
 			LOG_ERR("Failed to format PSU JSON");

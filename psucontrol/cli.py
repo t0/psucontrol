@@ -11,6 +11,10 @@ import requests
 import sys
 import time
 from typing import Dict, Any
+import serial
+from datetime import datetime
+import re
+
 
 from zeroconf import ServiceBrowser, ServiceListener, Zeroconf
 
@@ -156,6 +160,68 @@ def cmd_flash(args):
 
     return 0
 
+def serial_log():
+    port = "/dev/ttyACM0"
+    baud = 115200
+
+    # Regex to remove ANSI escape sequences
+    ansi_escape = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
+    
+    log_dir = os.path.expanduser("~/PSUCONTROL_LOGS")
+    os.makedirs(log_dir, exist_ok=True)
+
+    logfile = f"{log_dir}/serial_{datetime.now().strftime('%Y%m%d__%H-%M-%S')}.log"
+    try:
+        with serial.Serial(port, baud, timeout=1) as ser, open(logfile, "w") as f:
+            print(f"Logging to {logfile} (Ctrl+C to stop)\n")
+            try:
+                while True:
+                    raw = ser.readline().decode(errors="ignore")
+                    line = ansi_escape.sub('', raw)  # Remove ANSI codes
+                    if line:
+                        print(line, end="")
+                        f.write(line)
+            except KeyboardInterrupt:
+                print("\nStopped.")
+    except serial.serialutil.SerialException as e:
+        raise RuntimeError(f"No serial connection found: {e}")
+
+def network_log(args):
+    log_dir = os.path.expanduser("~/PSUCONTROL_LOGS")
+    os.makedirs(log_dir, exist_ok=True)
+
+    logfile = f"{log_dir}/psu_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl"
+
+    print(f"Logging PSU telemetry to {logfile}")
+
+    try:
+        with open(logfile, "w") as f:
+            while True:
+                try:
+                    response = requests.get(f"http://{args.target}/psu", 
+                                     timeout=1.0) # timeout of 1s for logging
+                    response.raise_for_status()
+                    data = response.json()
+
+                    entry = {
+                        "host_time": datetime.now().isoformat(),
+                        "device": args.target,
+                        **data
+                    }
+
+                    print(entry)
+                    f.write(json.dumps(entry) + "\n")
+                    f.flush()
+
+                except Exception as e:
+                    print(f"Error: {e}")
+
+                interval = 1 / args.polling
+                time.sleep(interval)
+
+    except KeyboardInterrupt:
+        print("\nStopped.")
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -173,6 +239,23 @@ Examples:
     )
 
     action = parser.add_mutually_exclusive_group(required=True)
+    action.add_argument(
+        '--serial_log',
+        action='store_true',
+        help='Log serial output. Serial connection required!'
+    )
+    action.add_argument(
+        '--log',
+        action='store_true',
+        help='Log PSU data'
+    )
+    action.add_argument(
+        '-p', '--polling',
+        type=float,
+        default=1.0,
+        help='Polling time in seconds (default: 1s)'
+    )
+    
     action.add_argument(
         '-d', '--discover',
         action='store_true',
@@ -225,7 +308,9 @@ Examples:
 
     args = parser.parse_args()
 
-    if args.discover:
+    if args.serial_log:
+        serial_log()
+    elif args.discover:
         if args.target:
             parser.error("--discover does not take a target argument")
         if args.timeout is None:
@@ -238,8 +323,10 @@ Examples:
     else:
         if not args.target:
             parser.error("target is required for --on, --off, and --status")
+        timeoutNone = False
         if args.timeout is None:
             args.timeout = 5.0
+            timeoutNone = True
 
         if args.on:
             return cmd_control(args, True)
@@ -247,6 +334,9 @@ Examples:
             return cmd_control(args, False)
         elif args.status:
             return cmd_status(args)
+        elif args.log:
+            network_log(args)
+            
 
     return 1
 
