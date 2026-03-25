@@ -62,7 +62,7 @@ async function fetchPsuTelemetry() {
         const data = await response.json();
 
 		// Compare with last sampled data
-        const now = new Date().toISOString();
+		const now = new Date().toLocaleTimeString();
         const sampled = [];
 
 		document.getElementById("vin").innerHTML = data.vin;
@@ -227,11 +227,12 @@ window.addEventListener("DOMContentLoaded", (ev) => {
 		const telemetryBlob = new Blob([csvContent], { type: "text/csv" });
 		const telemetryURL = URL.createObjectURL(telemetryBlob);
 
-		const datenow = Date.now();
+		const datenow = new Date().toLocaleDateString().replace(/\//g, '-');
+		const timnow = new Date().toLocaleTimeString().replace(/:/g, '-');
 
 		const a = document.createElement("a");
 		a.href = telemetryURL;
-		a.download = `psu_telemetry_${datenow}.csv`;
+		a.download = `psu_telemetry_${datenow}_${timnow}.csv`;
 		a.click();
 
 		// event log
@@ -241,7 +242,7 @@ window.addEventListener("DOMContentLoaded", (ev) => {
 
 		const b = document.createElement("a");
 		b.href = eventURL;
-		b.download = `psu_EventLog_${datenow}.log`;
+		b.download = `psu_EventLog_${datenow}_${timnow}.log`;
 		b.click();
 
 		// Revoke URLs to free memory
