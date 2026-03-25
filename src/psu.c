@@ -222,15 +222,36 @@ int psu_get_current_out(float *amps)
 	return ret;
 }
 
-int psu_get_temperature(float *celsius)
-{
-	uint16_t raw;
-	int ret = psu_read_word(0x8D, &raw); /* READ_TEMPERATURE_1 */
-	if (ret == 0) {
-		*celsius = linear11_to_float(raw);
-	}
-	return ret;
+int psu_get_temp_sensor(uint8_t reg, float *celsius) {
+    uint16_t raw;
+    int ret = psu_read_word(reg, &raw);
+    if (ret == 0) {
+        *celsius = linear11_to_float(raw);
+    }
+    return ret;
 }
+
+int psu_get_temp_inlet(float *celsius) {
+	return psu_get_temp_sensor(0x8D, celsius);
+}
+
+int psu_get_temp_oring(float *celsius) {
+	return psu_get_temp_sensor(0x8E, celsius);
+}
+
+int psu_get_temp_outlet(float *celsius) {
+	return psu_get_temp_sensor(0x8F, celsius);
+}
+
+// int psu_get_temperature(float *celsius)
+// {
+// 	uint16_t raw;
+// 	int ret = psu_read_word(0x8D, &raw); /* READ_TEMPERATURE_1 */
+// 	if (ret == 0) {
+// 		*celsius = linear11_to_float(raw);
+// 	}
+// 	return ret;
+// }
 
 int psu_get_fan_speed(int *rpm)
 {
@@ -269,9 +290,109 @@ int psu_get_output_status(bool *enabled)
 	int ret = psu_read_byte(0x78, &status); /* STATUS_BYTE */
 	if (ret == 0) {
 		/* Bit 6 = OFF, Bit 7 = VOUT_OV_FAULT */
-		*enabled = !(status & 0x40);
+		bool off = status & 0x40;
+		bool fault = status & 0x80;
+		*enabled = !off && !fault;
 	}
 	return ret;
+}
+
+
+// Faults and Statuses
+int psu_get_status_word(uint16_t *status) { // faults
+	return psu_read_word(0x79, status);
+}
+int psu_get_status_vout(uint8_t *status) { // over/under voltage
+    return psu_read_byte(0x7A, status);
+}
+int psu_get_status_iout(uint8_t *status) { // overcurrent
+    return psu_read_byte(0x7B, status);
+}
+int psu_get_status_vin(uint8_t *status) { // over/under voltage and input fault
+    return psu_read_byte(0x7C, status);
+}
+int psu_get_status_temp(uint8_t *status) { // overtemperature
+    return psu_read_byte(0x7D, status);
+}
+int psu_get_status_fan(uint8_t *status) { // fan fault
+    return psu_read_byte(0x81, status);
+}
+
+
+void psu_check_faults(void) {
+    uint16_t status_word;
+    uint8_t vout, vin, temp, iout, fan;
+
+    static uint16_t last_status_word = 0;
+
+    if (psu_get_status_word(&status_word) == 0) { // STATUS_WORD
+        if (status_word != last_status_word) {
+            LOG_WRN("PSU STATUS_WORD changed: 0x%04x → 0x%04x",
+                    last_status_word, status_word);
+            last_status_word = status_word;
+        }
+    }
+
+    if (psu_get_status_vout(&vout) == 0) {
+        if (vout & 0x80) LOG_ERR("VOUT Overvoltage fault");
+        if (vout & 0x40) LOG_WRN("VOUT Undervoltage warning");
+    }
+
+    if (psu_get_status_vin(&vin) == 0) {
+        if (vin & 0x80) LOG_ERR("VIN Overvoltage fault");
+        if (vin & 0x40) LOG_WRN("VIN Undervoltage warning");
+    }
+
+    if (psu_get_status_temp(&temp) == 0) {
+        if (temp & 0x80) LOG_ERR("Overtemperature fault");
+        if (temp & 0x40) LOG_WRN("Overtemperature warning");
+    }
+
+    if (psu_get_status_iout(&iout) == 0) {
+        if (iout & 0x80) LOG_ERR("Overcurrent fault");
+        if (iout & 0x40) LOG_WRN("Overcurrent warning");
+    }
+
+    if (psu_get_status_fan(&fan) == 0) {
+        if (fan & 0x80) LOG_ERR("Fan fault");
+        if (fan & 0x40) LOG_WRN("Fan warning");
+    }
+	 
+	// clear faults
+	int ret = psu_write_byte(0x03, 0x00);
+    if (ret != 0) {
+        LOG_ERR("Failed to clear PSU faults: %d", ret);
+    }
+}
+
+int psu_get_faults(char *buf, size_t buflen)
+{
+    uint8_t vout, vin, temp, iout, fan;
+    size_t offset = 0;
+
+    if (psu_get_status_vout(&vout) == 0 && (vout & 0xC0)) {
+        if (vout & 0x80) offset += snprintf(buf+offset, buflen-offset, "%s%s", offset?",":"", "VOUT Overvoltage fault");
+        if (vout & 0x40) offset += snprintf(buf+offset, buflen-offset, "%s%s", offset?",":"", "VOUT Undervoltage warning");
+    }
+    if (psu_get_status_vin(&vin) == 0 && (vin & 0xC0)) {
+        if (vin & 0x80) offset += snprintf(buf+offset, buflen-offset, "%s%s", offset?",":"", "VIN Overvoltage fault");
+        if (vin & 0x40) offset += snprintf(buf+offset, buflen-offset, "%s%s", offset?",":"", "VIN Undervoltage warning");
+    }
+    if (psu_get_status_temp(&temp) == 0 && (temp & 0xC0)) {
+        if (temp & 0x80) offset += snprintf(buf+offset, buflen-offset, "%s%s", offset?",":"", "Overtemperature fault");
+        if (temp & 0x40) offset += snprintf(buf+offset, buflen-offset, "%s%s", offset?",":"", "Overtemperature warning");
+    }
+    if (psu_get_status_iout(&iout) == 0 && (iout & 0xC0)) {
+        if (iout & 0x80) offset += snprintf(buf+offset, buflen-offset, "%s%s", offset?",":"", "Overcurrent fault");
+        if (iout & 0x40) offset += snprintf(buf+offset, buflen-offset, "%s%s", offset?",":"", "Overcurrent warning");
+    }
+    if (psu_get_status_fan(&fan) == 0 && (fan & 0xC0)) {
+        if (fan & 0x80) offset += snprintf(buf+offset, buflen-offset, "%s%s", offset?",":"", "Fan fault");
+        if (fan & 0x40) offset += snprintf(buf+offset, buflen-offset, "%s%s", offset?",":"", "Fan warning");
+    }
+
+    buf[offset] = '\0';
+    return 0;
 }
 
 /* Manufacturer Information Functions */
