@@ -5,6 +5,7 @@
 
 const TelemetryLog = []; // stores telemetry
 const EventLog = [];     // stores events (faults)
+const MAX_POINTS = 100;  // Max points to show on charts
 
 // Change these, if necessary
 const SAMPLING_THRESHOLD = {
@@ -206,10 +207,28 @@ window.addEventListener("DOMContentLoaded", (ev) => {
 	})
 
 	const psu_off_btn = document.getElementById("psu_off");
+	const modal = document.getElementById("confirmModal");
+	const confirmYes = document.getElementById("confirmYes");
+	const confirmNo = document.getElementById("confirmNo");
+
 	psu_off_btn.addEventListener("click", (event) => {
-		console.log("PSU output OFF clicked");
+		modal.style.display = "block";
+	}); // Doing it this way because `confirm()` stops telemetry updates. Needed to get crafty
+	// 	if (!confirm("Are you sure you want to turn OFF the PSU output? \nThis will immediately cut power to the boards.")) {
+	// 		return;
+	// 	}
+	// 	console.log("PSU output OFF clicked");
+	// 	setPsuOutput(false);
+	// })
+	confirmYes.addEventListener("click", () => {
+		console.log("PSU output OFF confirmed");
 		setPsuOutput(false);
-	})
+		modal.style.display = "none";
+	});
+	confirmNo.addEventListener("click", () => {
+		console.log("PSU output OFF cancelled");
+		modal.style.display = "none";
+	});
 
 	initCharts();
 	
@@ -256,7 +275,6 @@ window.addEventListener("DOMContentLoaded", (ev) => {
 
 const charts = {}; // store chart objects
 const chartData = {}; // store chart data arrays
-const MAX_POINTS = 100;
 
 function initCharts() {
 	const metrics = [
