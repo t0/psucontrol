@@ -212,22 +212,28 @@ window.addEventListener("DOMContentLoaded", (ev) => {
 	const confirmNo = document.getElementById("confirmNo");
 
 	psu_off_btn.addEventListener("click", (event) => {
+		if (document.getElementById("psu_status").innerHTML === "OFF") {
+			return; // if PSU is already off, do nothing
+		}
 		modal.style.display = "block";
-	}); // Doing it this way because `confirm()` stops telemetry updates. Needed to get crafty
-	// 	if (!confirm("Are you sure you want to turn OFF the PSU output? \nThis will immediately cut power to the boards.")) {
-	// 		return;
-	// 	}
-	// 	console.log("PSU output OFF clicked");
-	// 	setPsuOutput(false);
-	// })
-	confirmYes.addEventListener("click", () => {
+		confirmYes.focus();
+	}); // Doing it this way because `confirm()` stops telemetry updates. Needed to get crafty!
+
+	confirmYes.addEventListener("click", () => { 
 		console.log("PSU output OFF confirmed");
 		setPsuOutput(false);
 		modal.style.display = "none";
 	});
-	confirmNo.addEventListener("click", () => {
+	confirmYes.addEventListener("keydown", (e) => {
+		if (e.key === "ArrowLeft" || e.key === "ArrowRight") confirmNo.focus();
+	});
+
+	confirmNo.addEventListener("click", () => { 
 		console.log("PSU output OFF cancelled");
-		modal.style.display = "none";
+		modal.style.display = "none"; 
+	});
+	confirmNo.addEventListener("keydown", (e) => {
+		if (e.key === "ArrowLeft" || e.key === "ArrowRight") confirmYes.focus();
 	});
 
 	initCharts();
