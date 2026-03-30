@@ -5,6 +5,7 @@
 
 const TelemetryLog = []; // stores telemetry
 const EventLog = [];     // stores events (faults)
+let lastFaults = [];
 const MAX_POINTS = 100;  // Max points to show on charts
 
 // Change these, if necessary
@@ -13,6 +14,8 @@ const SAMPLING_THRESHOLD = {
     vout: 0.05, // Output voltage change threshold (V)
     iout: 0.05, // Output current change threshold (A)
     temp: 0.5,  // Temperature change threshold (°C)
+	oringtemp: 0.5, // Oring temperature change threshold (°C)
+	outlettemp: 0.5, // Outlet temperature change threshold (°C)
     fan: 50     // Fan speed change threshold (RPM)
 };
 
@@ -21,8 +24,22 @@ let lastSampledData = {
     vout: null,
     iout: null,
     temp: null,
+	oringtemp: null,
+	outlettemp: null,
     fan_rpm: null
 };
+
+function faultsChanged(newFaults) {
+    return JSON.stringify(newFaults) !== JSON.stringify(lastFaults);
+}
+
+async function resetFaults() {
+	console.log("Clearing PSU faults and warnings...");
+    await fetch("/psu-clear-faults", { method: "POST" });
+	if (document.getElementById("psu_status").innerHTML === "ON") {
+		setTimeout(fetchPsuTelemetry, 200); // Refresh telemetry to update faults
+	}
+}
 
 async function fetchUptime()
 {
@@ -69,7 +86,10 @@ async function fetchPsuTelemetry() {
 		document.getElementById("vin").innerHTML = data.vin;
 		document.getElementById("vout").innerHTML = data.vout;
 		document.getElementById("iout").innerHTML = data.iout;
-		document.getElementById("temp").innerHTML = data.temp;
+		document.getElementById("pout").innerHTML = (data.vout * data.iout).toFixed(2);
+		document.getElementById("inlet_temp").innerHTML = data.temp_inlet;
+		document.getElementById("oring_temp").innerHTML = data.temp_oring;
+		document.getElementById("outlet_temp").innerHTML = data.temp_outlet;
 		document.getElementById("fan_rpm").innerHTML = data.fan_rpm;
 		document.getElementById("psu_status").innerHTML = data.output_on ? "ON" : "OFF";
 		document.getElementById("psu_status").style.color = data.output_on ? "green" : "red";
@@ -85,7 +105,9 @@ async function fetchPsuTelemetry() {
 				vin: data.vin,
 				vout: data.vout,
 				iout: data.iout,
-				temp: data.temp,
+				temp_inlet: data.temp_inlet,
+				temp_oring: data.temp_oring,
+				temp_outlet: data.temp_outlet,
 				fan_rpm: data.fan_rpm
 			});
 
@@ -94,15 +116,20 @@ async function fetchPsuTelemetry() {
 				vin: data.vin,
 				vout: data.vout,
 				iout: data.iout,
-				temp: data.temp,
+				temp_inlet: data.temp_inlet,
+				temp_oring: data.temp_oring,
+				temp_outlet: data.temp_outlet,
 				fan_rpm: data.fan_rpm,
 				psu_status: data.output_on ? 1 : 0
 			});
 
-			EventLog.push({
-				timestamp: now, 
-				fault: data.faults
-			})
+			if (faultsChanged(data.faults)) {
+				EventLog.push({
+					timestamp: now,
+					fault: data.faults
+				});
+				lastFaults = [...data.faults];
+			}
 
 			return;
 		}
@@ -129,11 +156,23 @@ async function fetchPsuTelemetry() {
             shouldSample = true;
         }
 
-        else if (Math.abs(data.temp - lastSampledData.temp) > SAMPLING_THRESHOLD.temp) {
-            sampled.push({ temp: data.temp });
-            lastSampledData.temp = data.temp;
+        else if (Math.abs(data.temp_inlet - lastSampledData.temp_inlet) > SAMPLING_THRESHOLD.temp_inlet) {
+            sampled.push({ temp_inlet: data.temp_inlet });
+            lastSampledData.temp_inlet = data.temp_inlet;
             shouldSample = true;
         }
+
+		else if (Math.abs(data.temp_oring - lastSampledData.temp_oring) > SAMPLING_THRESHOLD.temp_oring) {
+			sampled.push({ temp_oring: data.temp_oring });
+			lastSampledData.temp_oring = data.temp_oring;
+			shouldSample = true;
+		}
+
+		else if (Math.abs(data.temp_outlet - lastSampledData.temp_outlet) > SAMPLING_THRESHOLD.temp_outlet) {
+			sampled.push({ temp_outlet: data.temp_outlet });
+			lastSampledData.temp_outlet = data.temp_outlet;
+			shouldSample = true;
+		}
 
         else if (Math.abs(data.fan_rpm - lastSampledData.fan_rpm) > SAMPLING_THRESHOLD.fan) {
             sampled.push({ fan_rpm: data.fan_rpm });
@@ -148,7 +187,9 @@ async function fetchPsuTelemetry() {
 				vin: data.vin,
 				vout: data.vout,
 				iout: data.iout,
-				temp: data.temp,
+				temp_inlet: data.temp_inlet,
+				temp_oring: data.temp_oring,
+				temp_outlet: data.temp_outlet,
 				fan_rpm: data.fan_rpm,
 				psu_status: data.output_on ? 1 : 0
 			};
@@ -164,7 +205,9 @@ async function fetchPsuTelemetry() {
         //     vin: data.vin,
         //     vout: data.vout,
         //     iout: data.iout,
-        //     temp: data.temp,
+        //     temp_inlet: data.temp_inlet,
+        //     temp_oring: data.temp_oring,
+        //     temp_outlet: data.temp_outlet,
         //     fan_rpm: data.fan_rpm,
         //     psu_status: data.output_on ? "ON" : "OFF"
         // });
@@ -287,7 +330,10 @@ function initCharts() {
 		{ id: "vinChart", label: "Input Voltage (V)", color: "rgb(75,192,192)" },
 		{ id: "voutChart", label: "Output Voltage (V)", color: "rgb(54,162,235)" },
 		{ id: "ioutChart", label: "Output Current (A)", color: "rgb(255,99,132)" },
-		{ id: "tempChart", label: "Temperature (C)", color: "rgb(255,206,86)" },
+		{ id: "poutChart", label: "Output Power (W)", color: "rgb(255,159,64)" },
+		{ id: "tempChart", label: "Inlet Temperature (C)", color: "rgb(255,206,86)" },
+		{ id: "oringTempChart", label: "O-ring Temperature (C)", color: "rgb(153,102,255)" },
+		{ id: "outletTempChart", label: "Outlet Temperature (C)", color: "rgb(255,102,255)" },
 		{ id: "fanChart", label: "Fan Speed (RPM)", color: "rgb(153,102,255)" },
 	];
 
@@ -336,7 +382,10 @@ function updateCharts(data) {
 		vinChart: data.vin,
 		voutChart: data.vout,
 		ioutChart: data.iout,
-		tempChart: data.temp,
+		poutChart: (data.vout * data.iout).toFixed(2),
+		tempChart: data.temp_inlet,
+		oringTempChart: data.temp_oring,
+		outletTempChart: data.temp_outlet,
 		fanChart: data.fan_rpm
 	};
 

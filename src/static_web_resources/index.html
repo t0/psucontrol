@@ -41,8 +41,23 @@
             <td>A</td>
         </tr>
         <tr>
-            <td>Temperature</td>
-            <td id="temp">--</td>
+            <td>Output Power</td>
+            <td id="pout">--</td>
+            <td>W</td>
+        </tr>
+        <tr>
+            <td>Inlet Temperature</td>
+            <td id="inlet_temp">--</td>
+            <td>&deg;C</td>
+        </tr>
+        <tr>
+            <td>Oring Temperature</td>
+            <td id="oring_temp">--</td>
+            <td>&deg;C</td>
+        </tr>
+        <tr>
+            <td>Outlet Temperature</td>
+            <td id="outlet_temp">--</td>
             <td>&deg;C</td>
         </tr>
         <tr>
@@ -53,6 +68,7 @@
     </table>
 
     <h4>Faults and Statuses</h4>
+    <button onclick="resetFaults()">Clear Faults and Warnings</button>
     <div id="psu_faults" style="border: 1px solid #ccc; padding: 10px; max-width: 600px; background: #fff3f3; color: #b00000;">
         <p>No faults detected.</p>
     </div>
@@ -65,28 +81,42 @@
     <table>
     <tr>
         <td>
-        <p>Input Voltage (V)</p>
-        <canvas id="vinChart" width="400" height="200"></canvas>
+            <p>Input Voltage (V)</p>
+            <canvas id="vinChart" width="400" height="200"></canvas>
         </td>
         <td>
-        <p>Output Voltage (V)</p>
-        <canvas id="voutChart" width="400" height="200"></canvas>
+            <p>Fan Speed (RPM)</p>
+            <canvas id="fanChart" width="400" height="200"></canvas>
         </td>
     </tr>
     <tr>
         <td>
-        <p>Output Current (A)</p>
-        <canvas id="ioutChart" width="400" height="200"></canvas>
+            <p>Output Voltage (V)</p>
+            <canvas id="voutChart" width="400" height="200"></canvas>
         </td>
         <td>
-        <p>Temperature (C)</p>
-        <canvas id="tempChart" width="400" height="200"></canvas>
+            <p>Output Current (A)</p>
+            <canvas id="ioutChart" width="400" height="200"></canvas>
         </td>
     </tr>
     <tr>
-        <td colspan="2">
-        <p>Fan Speed (RPM)</p>
-        <canvas id="fanChart" width="800" height="200"></canvas>
+        <td>
+            <p>Output Power (W)</p>
+            <canvas id="poutChart" width="400" height="200"></canvas>
+        </td>
+        <td>
+            <p>Inlet Temperature (&deg;C)</p>
+            <canvas id="tempChart" width="400" height="200"></canvas>
+        </td>
+    </tr>
+    <tr>
+        <td>
+            <p>O-ring Temperature (&deg;C)</p>
+            <canvas id="oringTempChart" width="400" height="200"></canvas>
+        </td>
+        <td>
+            <p>Outlet Temperature (&deg;C)</p>
+            <canvas id="outletTempChart" width="400" height="200"></canvas>
         </td>
     </tr>
     </table>
