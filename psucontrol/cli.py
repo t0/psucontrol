@@ -194,6 +194,8 @@ def network_log(args):
 
     print(f"Logging PSU telemetry to {logfile}")
 
+    text = ""
+
     try:
         with open(logfile, "w") as f:
             while True:
@@ -201,6 +203,7 @@ def network_log(args):
                     response = requests.get(f"http://{args.target}/psu", 
                                      timeout=1.0) # timeout of 1s for logging
                     response.raise_for_status()
+                    text = response.text
                     data = response.json()
 
                     entry = {
@@ -214,7 +217,7 @@ def network_log(args):
                     f.flush()
 
                 except Exception as e:
-                    print(f"Error: {e}")
+                    print(f"Error: raw response: {text},\nerror: {e}")
 
                 interval = 1 / args.polling
                 time.sleep(interval)

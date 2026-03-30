@@ -199,16 +199,18 @@ static int psu_telemetry_handler(struct http_client_ctx *client, enum http_trans
 	}
 
 	if (status == HTTP_SERVER_REQUEST_DATA_FINAL) {
-		float vin = 0, vout = 0, iout = 0, temp = 0;
+		float vin = 0, vout = 0, iout = 0, temp = 0,  oringtemp = 0, outlettemp = 0;
 		int fan_rpm = 0;
 		bool output_on = false;
-		int ret_vin, ret_vout, ret_iout, ret_temp, ret_fan;
+		int ret_vin, ret_vout, ret_iout, ret_temp, ret_oringtemp, ret_outlettemp, ret_fan;
 
 		/* Read all telemetry */
 		ret_vin = psu_get_voltage_in(&vin);
 		ret_vout = psu_get_voltage_out(&vout);
 		ret_iout = psu_get_current_out(&iout);
 		ret_temp = psu_get_temp_inlet(&temp); // can add other sensors too if desired
+		ret_oringtemp = psu_get_temp_oring(&oringtemp);
+		ret_outlettemp = psu_get_temp_outlet(&outlettemp);
 		ret_fan = psu_get_fan_speed(&fan_rpm);
 		psu_get_output_status(&output_on);
 
@@ -220,17 +222,18 @@ static int psu_telemetry_handler(struct http_client_ctx *client, enum http_trans
 
 		/* Format as JSON - use integer formatting to avoid float printf */
 		ret = snprintf(json_buf, sizeof(json_buf),
-			       "{\"vin\":%d.%02d,\"vout\":%d.%02d,\"iout\":%d.%03d,"
-			       "\"temp\":%d.%d,\"fan_rpm\":%d,\"output_on\":%s,"
-				   "\"faults\":[%s]}",
-			       (int)vin, (int)(vin * 100) % 100,
-			       (int)vout, (int)(vout * 100) % 100,
-			       (int)iout, (int)(iout * 1000) % 1000,
-			       (int)temp, (int)(temp * 10) % 10,
-			       fan_rpm,
-			       output_on ? "true" : "false",
-				   fault_buf
-				);
+			"{\"vin\":%d.%02d,\"vout\":%d.%02d,\"iout\":%d.%03d,"
+			"\"temp_inlet\":%d.%d,\"temp_oring\":%d.%d,\"temp_outlet\":%d.%d,"
+			"\"fan_rpm\":%d,\"output_on\":%s,\"faults\":[%s]}",
+			(int)vin, (int)(vin * 100) % 100,
+			(int)vout, (int)(vout * 100) % 100,
+			(int)iout, (int)(iout * 1000) % 1000,
+			(int)temp, (int)(temp * 10) % 10,
+			(int)oringtemp, (int)(oringtemp * 10) % 10,
+			(int)outlettemp, (int)(outlettemp * 10) % 10,
+			fan_rpm, output_on ? "true" : "false",
+			fault_buf
+		);
 
 		if (ret < 0 || ret >= sizeof(json_buf)) {
 			LOG_ERR("Failed to format PSU JSON");
@@ -244,6 +247,37 @@ static int psu_telemetry_handler(struct http_client_ctx *client, enum http_trans
 
 	return 0;
 }
+
+static int psu_clear_faults_handler(struct http_client_ctx *client,
+				    enum http_transaction_status status,
+				    const struct http_request_ctx *request_ctx,
+				    struct http_response_ctx *response_ctx,
+				    void *user_data)
+{
+	if (status == HTTP_SERVER_TRANSACTION_ABORTED ||
+	    status == HTTP_SERVER_TRANSACTION_COMPLETE) {
+		return 0;
+	}
+
+	if (status == HTTP_SERVER_REQUEST_DATA_FINAL) {
+		int ret = psu_clear_faults();
+
+		if (ret < 0) {
+			LOG_ERR("Failed to clear PSU faults: %d", ret);
+		} else {
+			LOG_INF("PSU faults cleared");
+		}
+
+		/* Simple response */
+		static const char response[] = "OK";
+		response_ctx->body = response;
+		response_ctx->body_len = sizeof(response) - 1;
+		response_ctx->final_chunk = true;
+	}
+
+	return 0;
+}
+
 
 static struct http_resource_detail_dynamic psu_resource_detail = {
 	.common = {
@@ -264,6 +298,19 @@ static uint16_t psu_http_port_be;
 static struct dns_sd_rec psu_service_record;
 static bool service_registered;
 static int network_connected_count = 0;
+static struct http_resource_detail_dynamic psu_clear_faults_resource_detail = {
+	.common = {
+		.type = HTTP_RESOURCE_TYPE_DYNAMIC,
+		.bitmask_of_supported_http_methods = BIT(HTTP_POST),
+	},
+	.cb = psu_clear_faults_handler,
+	.user_data = NULL,
+};
+
+HTTP_RESOURCE_DEFINE(psu_clear_faults_resource,
+		     psu_http_service,
+		     "/psu-clear-faults",
+		     &psu_clear_faults_resource_detail);
 
 HTTP_RESOURCE_DEFINE(index_html_gz_resource, psu_http_service, "/",
 		     &index_html_gz_resource_detail);

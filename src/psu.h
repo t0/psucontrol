@@ -29,6 +29,7 @@ int psu_get_fan_speed(int *rpm);           /* READ_FAN_SPEED_1 */
 
 /* Fault function */
 int psu_get_faults(char *buf, size_t buflen);
+int psu_clear_faults(void);
 
 /* PSU control */
 int psu_set_output(bool enable);                /* OPERATION register */

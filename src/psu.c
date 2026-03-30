@@ -18,7 +18,7 @@ LOG_MODULE_REGISTER(psu, LOG_LEVEL_INF);
 #define PSU_NODE DT_NODELABEL(psu)
 #define PSON_L_NODE DT_NODELABEL(pson_l)
 
-#define ADDSTAT(msg) offset += snprintf(buf+offset, buflen-offset, "%s%s", offset?",":"", msg)
+#define ADDSTAT(msg) offset += snprintf(buf+offset, buflen-offset, "%s\"%s\"", offset ? "," : "", msg)
 
 static const struct device *eeprom_dev = DEVICE_DT_GET(PSU_EEPROM_NODE);
 
@@ -104,6 +104,9 @@ int psu_read_word(uint8_t reg, uint16_t *value)
 	if (ret == 0) {
 		/* PMBus uses little-endian byte order */
 		*value = data[0] | (data[1] << 8);
+	}
+	if (ret != 0) {
+		LOG_ERR("I2C read failed: reg=0x%02x err=%d", reg, ret);
 	}
 	return ret;
 }
@@ -300,6 +303,11 @@ int psu_get_output_status(bool *enabled)
 }
 
 // Faults and Statuses
+int psu_clear_faults(void) {
+    uint8_t data[1] = {0x03};
+    return i2c_write(psu_i2c_dev, data, 1, psu_addr);
+}
+
 int psu_get_status_word(uint16_t *status) { // faults
 	return psu_read_word(0x79, status);
 }
@@ -339,18 +347,28 @@ int psu_get_faults(char *buf, size_t buflen){
         if (temp & 0x80) ADDSTAT("Overtemperature fault");
         if (temp & 0x40) ADDSTAT("Overtemperature warning");
     }
-    if (psu_get_status_iout(&iout) == 0) {
+    if (psu_get_status_iout(&iout) == 0) { // 1: POUT OP fault; 0: POUT OP warning
         if (iout & 0x80) ADDSTAT("Overcurrent fault");
 		// if (iout & 0x40) ADDSTAT("Overcurrent and Low Voltage Shutdown fault");
         if (iout & 0x20) ADDSTAT("Overcurrent warning");
 		if (iout & 0x10) ADDSTAT("Undercurrent fault");
+		if (iout & 0x08) ADDSTAT("Current Share Fault");
+		if (iout & 0x04) ADDSTAT("In Power Limiting Mode");
+		if (iout & 0x01) ADDSTAT("POUT OP warning");
     }
     if (psu_get_status_fan(&fan) == 0) {
         if (fan & 0x80) ADDSTAT("Fan fault"); // Fan 1 fault. Ignoring Fans 2, 3, 4 (unsure if even present)
         if (fan & 0x20) ADDSTAT("Fan warning"); // Fan 1 warning
     }
 
-    buf[offset] = '\0';
+    if (offset == 0) {
+        buf[0] = '\0';
+    } else if (offset < buflen) {
+        buf[offset] = '\0';
+    } else {
+        buf[buflen - 1] = '\0';
+    }
+
     return 0;
 }
 
