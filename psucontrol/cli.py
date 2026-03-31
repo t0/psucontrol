@@ -225,6 +225,20 @@ def network_log(args):
     except KeyboardInterrupt:
         print("\nStopped.")
 
+def clear_faults(args):
+    """Clear PSU faults"""
+
+    try:
+        response = requests.post(
+            f"http://{args.target}/psu-clear-faults",
+            timeout=args.timeout)
+        response.raise_for_status()
+        print("PSU faults cleared")
+        return 0
+    except requests.exceptions.RequestException as e:
+        print(f"Failed to clear PSU faults: {e}", file=sys.stderr)
+        return 1
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -308,6 +322,11 @@ Examples:
         default=None,
         help='Build directory for west flash (only for --flash)'
     )
+    parser.add_argument(
+        '--clear-faults',
+        action='store_true',
+        help='Clear PSU faults'
+    )
 
     args = parser.parse_args()
 
@@ -325,7 +344,7 @@ Examples:
         return cmd_flash(args)
     else:
         if not args.target:
-            parser.error("target is required for --on, --off, and --status")
+            parser.error("target is required for --on, --off, --status, --log, and --clear-faults")
         timeoutNone = False
         if args.timeout is None:
             args.timeout = 5.0
@@ -339,6 +358,8 @@ Examples:
             return cmd_status(args)
         elif args.log:
             network_log(args)
+        elif args.clear_faults:
+            return clear_faults(args)
             
 
     return 1
