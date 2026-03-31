@@ -260,7 +260,7 @@ static int psu_clear_faults_handler(struct http_client_ctx *client,
 	}
 
 	if (status == HTTP_SERVER_REQUEST_DATA_FINAL) {
-		int ret = psu_clear_faults();
+		int ret = reset_psu_faults();
 
 		if (ret < 0) {
 			LOG_ERR("Failed to clear PSU faults: %d", ret);

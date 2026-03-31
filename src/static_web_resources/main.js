@@ -37,7 +37,7 @@ async function resetFaults() {
 	console.log("Clearing PSU faults and warnings...");
     await fetch("/psu-clear-faults", { method: "POST" });
 	if (document.getElementById("psu_status").innerHTML === "ON") {
-		setTimeout(fetchPsuTelemetry, 200); // Refresh telemetry to update faults
+		setTimeout(fetchPsuTelemetry, 1000); // Refresh telemetry to update faults. THIS DOESN'T SEEM TO WORK AS DESIRED :(
 	}
 }
 

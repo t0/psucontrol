@@ -308,6 +308,23 @@ int psu_clear_faults(void) {
     return i2c_write(psu_i2c_dev, data, 1, psu_addr);
 }
 
+int psu_disable_output(void) {
+	uint8_t data[2];
+
+	// OPERATION command = 0x01
+	data[0] = 0x01;
+	data[1] = 0x00; // Turn OFF (bit 7 = 0)
+
+	return i2c_write(psu_i2c_dev, data, 2, psu_addr);
+}
+
+int reset_psu_faults(void) {
+	psu_clear_faults();
+	k_usleep(100000); // 100ms delay
+	return psu_disable_output();
+}
+
+
 int psu_get_status_word(uint16_t *status) { // faults
 	return psu_read_word(0x79, status);
 }
