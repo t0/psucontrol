@@ -97,6 +97,7 @@ def cmd_flash(args):
         ("Updating west workspace", ['west', 'update']),
         ("Exporting Zephyr environment", ['west', 'zephyr-export']),
         ("Installing packages", ['west', 'packages', 'pip', '--install']),
+        ("Installing Zephyr SDK", ['west', 'sdk', 'install', '-t', 'arm-zephyr-eabi']),
         ("Building firmware", ['west', 'build', '-b', 'nucleo_h723zg', '.']),
         ("Flashing firmware", ['west', 'flash']),
     ])
