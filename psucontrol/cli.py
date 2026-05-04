@@ -250,6 +250,17 @@ Examples:
         action='store_true',
         help='Flash firmware to PSU controller (requires STLink connection)'
     )
+    action.add_argument(
+        '--fan-duty',
+        type=int,
+        help='Set fan duty cycle (0-100, in %). Note that the PSU seems to set a minimum fan duty depending on power level.'
+    )
+    action.add_argument(
+        '--write-reg',
+        nargs=2,
+        metavar=('REG', 'VALUE'),
+        help='Write PMBus register (hex), e.g. --write-reg 0x3A 0x2000'
+    )
 
     parser.add_argument(
         'target',
@@ -344,6 +355,60 @@ Examples:
             network_log(args)
         elif args.clear_faults:
             return clear_faults(args)
+        elif args.fan_duty is not None:
+            reg_str, val_str = "0x3B", f"{args.fan_duty}"
+            try:
+                reg = int(reg_str, 0)
+                value = int(val_str, 0)
+
+                payload = {
+                    "reg": reg,
+                    "value": value
+                }
+
+                response = requests.post(
+                    f"http://{args.target}/psu-test-register",
+                    json=payload,
+                    timeout=args.timeout
+                )
+                response.raise_for_status()
+
+                print(f"Set fan duty cycle to {args.fan_duty}% (reg 0x{reg:02X} = 0x{value:04X})")
+                return 0
+            except requests.exceptions.RequestException as e:
+                print(f"Failed to write register: {e}", file=sys.stderr)
+                return 1
+            except ValueError:
+                print("Invalid fan duty value. Must be an integer between 0 and 100.", file=sys.stderr)
+                return 1
+        elif args.write_reg:
+            reg_str, val_str = args.write_reg
+
+            try:
+                reg = int(reg_str, 0)
+                value = int(val_str, 0)
+
+                payload = {
+                    "reg": reg,
+                    "value": value
+                }
+
+                response = requests.post(
+                    f"http://{args.target}/psu-test-register",
+                    json=payload,
+                    timeout=args.timeout
+                )
+                response.raise_for_status()
+
+                print(f"Wrote reg 0x{reg:02X} = 0x{value:04X}")
+                return 0
+
+            except ValueError:
+                print("Invalid register/value format. Use hex like 0x3A 0x2000", file=sys.stderr)
+                return 1
+            except requests.exceptions.RequestException as e:
+                print(f"Failed to write register: {e}", file=sys.stderr)
+                return 1
             
 
     return 1

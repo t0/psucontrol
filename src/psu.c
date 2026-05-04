@@ -121,6 +121,20 @@ int psu_write_byte(uint8_t reg, uint8_t value)
 	return i2c_write(psu_i2c_dev, data, 2, psu_addr);
 }
 
+int psu_write_word(uint8_t reg, uint16_t value)
+{
+	uint8_t data[3];
+    data[0] = reg;
+    data[1] = value & 0xFF;        // LSB
+    data[2] = (value >> 8) & 0xFF; // MSB
+
+    if (!device_is_ready(psu_i2c_dev)) {
+        return -ENODEV;
+    }
+
+    return i2c_write(psu_i2c_dev, data, 3, psu_addr);
+}
+
 /* PMBus block read - first byte is length */
 static int psu_block_read(uint8_t reg, uint8_t *data, size_t max_len)
 {
@@ -408,4 +422,31 @@ int psu_get_mfr_revision(char *buf, size_t buflen)
 int psu_get_mfr_serial(char *buf, size_t buflen)
 {
 	return psu_block_read(0x9E, (uint8_t *)buf, buflen - 1);
+}
+
+
+// TESTING PSU FAN-WRITE
+void psu_test_register(uint8_t reg, uint16_t value)
+{
+    int ret;
+
+    LOG_INF("Testing reg 0x%02X with value 0x%04X", reg, value);
+
+    ret = psu_write_word(reg, value);
+    if (ret != 0) {
+        LOG_ERR("Write failed: %d", ret);
+        return;
+    }
+
+    k_msleep(200); // let PSU react
+
+    int rpm;
+    if (psu_get_fan_speed(&rpm) == 0) {
+        LOG_INF("Fan RPM after write: %d", rpm);
+    }
+
+    float temp;
+    if (psu_get_temp_outlet(&temp) == 0) {
+        LOG_INF("Outlet temp: %.2f C", temp);
+    }
 }

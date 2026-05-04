@@ -40,6 +40,38 @@ static const struct json_obj_descr psu_command_descr[] = {
 	JSON_OBJ_DESCR_PRIM(struct psu_command, output_state, JSON_TOK_TRUE),
 };
 
+struct psu_reg_command {
+    uint8_t reg;
+    uint16_t value;
+};
+
+static const struct json_obj_descr psu_reg_command_descr[] = {
+    JSON_OBJ_DESCR_PRIM(struct psu_reg_command, reg, JSON_TOK_NUMBER),
+    JSON_OBJ_DESCR_PRIM(struct psu_reg_command, value, JSON_TOK_NUMBER),
+};
+
+static void parse_psu_reg_post(uint8_t *buf, size_t len)
+{
+    struct psu_reg_command cmd;
+    int ret;
+
+    const int expected = BIT_MASK(ARRAY_SIZE(psu_reg_command_descr));
+
+    ret = json_obj_parse(buf, len,
+                         psu_reg_command_descr,
+                         ARRAY_SIZE(psu_reg_command_descr),
+                         &cmd);
+
+    if (ret != expected) {
+        LOG_WRN("Invalid register JSON, ret=%d", ret);
+        return;
+    }
+
+    LOG_INF("Testing reg 0x%02X with value 0x%04X", cmd.reg, cmd.value);
+
+    psu_test_register(cmd.reg, cmd.value);
+}
+
 static const struct device *leds_dev = DEVICE_DT_GET_ANY(gpio_leds);
 
 static uint8_t index_html_gz[] = {
@@ -419,6 +451,56 @@ static int network_setup(void)
 	return 0;
 }
 
+static int psu_test_reg_handler(struct http_client_ctx *client,
+    enum http_transaction_status status,
+    const struct http_request_ctx *request_ctx,
+    struct http_response_ctx *response_ctx,
+    void *user_data)
+{
+    static uint8_t buf[32];
+    static size_t cursor;
+
+    if (status == HTTP_SERVER_TRANSACTION_ABORTED ||
+        status == HTTP_SERVER_TRANSACTION_COMPLETE) {
+        cursor = 0;
+        return 0;
+    }
+
+    if (request_ctx->data_len + cursor > sizeof(buf)) {
+        cursor = 0;
+        return -ENOMEM;
+    }
+
+    memcpy(buf + cursor, request_ctx->data, request_ctx->data_len);
+    cursor += request_ctx->data_len;
+
+    if (status == HTTP_SERVER_REQUEST_DATA_FINAL) {
+        parse_psu_reg_post(buf, cursor);
+        cursor = 0;
+
+        static const char response[] = "OK";
+        response_ctx->body = response;
+        response_ctx->body_len = sizeof(response) - 1;
+        response_ctx->final_chunk = true;
+    }
+
+    return 0;
+}
+
+static struct http_resource_detail_dynamic psu_test_reg_resource_detail = {
+    .common = {
+        .type = HTTP_RESOURCE_TYPE_DYNAMIC,
+        .bitmask_of_supported_http_methods = BIT(HTTP_POST),
+    },
+    .cb = psu_test_reg_handler,
+    .user_data = NULL,
+};
+
+HTTP_RESOURCE_DEFINE(psu_test_reg_resource,
+    psu_http_service,
+    "/psu-test-register",
+    &psu_test_reg_resource_detail);
+
 SYS_INIT(network_setup, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
 
 int main(void)
@@ -433,3 +515,4 @@ int main(void)
 	LOG_INF("HTTP server started");
 	return 0;
 }
+

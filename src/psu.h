@@ -18,6 +18,9 @@ int psu_read_word(uint8_t reg, uint16_t *value);
 int psu_write_byte(uint8_t reg, uint8_t value);
 int psu_eeprom_read(uint32_t offset, uint8_t *data, size_t len);
 
+// Higher level functions
+void psu_test_register(uint8_t reg, uint16_t value);
+
 /* PMBus telemetry functions */
 int psu_get_voltage_in(float *volts);      /* READ_VIN */
 int psu_get_voltage_out(float *volts);     /* READ_VOUT */
