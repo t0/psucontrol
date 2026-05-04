@@ -9,11 +9,15 @@ import os
 import requests
 import sys
 import time
+from typing import Dict, Any
 import serial
 from datetime import datetime
 import re
 
+
 from .api import PSUController, discover
+
+from .api import PSUController
 
 
 def cmd_discover(args):
@@ -76,6 +80,26 @@ def serial_log():
     # Regex to remove ANSI escape sequences
     ansi_escape = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
 
+def cmd_flash(args):
+    """Flash firmware to PSU controller"""
+    import subprocess
+
+                except Exception as e:
+                    print(f"Error: raw response: {text},\nerror: {e}")
+
+                interval = 1 / args.polling
+                time.sleep(interval)
+
+    except KeyboardInterrupt:
+        print("\nStopped.")
+
+def serial_log():
+    port = "/dev/ttyACM0"
+    baud = 115200
+
+    # Regex to remove ANSI escape sequences
+    ansi_escape = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
+    
     log_dir = os.path.expanduser("~/PSUCONTROL_LOGS")
     os.makedirs(log_dir, exist_ok=True)
 
@@ -86,7 +110,7 @@ def serial_log():
             try:
                 while True:
                     raw = ser.readline().decode(errors="ignore")
-                    line = ansi_escape.sub("", raw)  # Remove ANSI codes
+                    line = ansi_escape.sub('', raw)  # Remove ANSI codes
                     if line:
                         print(line, end="")
                         f.write(line)
@@ -94,7 +118,6 @@ def serial_log():
                 print("\nStopped.")
     except serial.serialutil.SerialException as e:
         raise RuntimeError(f"No serial connection found: {e}")
-
 
 def network_log(args):
     log_dir = os.path.expanduser("~/PSUCONTROL_LOGS")
@@ -110,9 +133,8 @@ def network_log(args):
         with open(logfile, "w") as f:
             while True:
                 try:
-                    response = requests.get(
-                        f"http://{args.target}/psu", timeout=1.0
-                    )  # timeout of 1s for logging
+                    response = requests.get(f"http://{args.target}/psu", 
+                                     timeout=1.0) # timeout of 1s for logging
                     response.raise_for_status()
                     text = response.text
                     data = response.json()
@@ -120,7 +142,7 @@ def network_log(args):
                     entry = {
                         "host_time": datetime.now().isoformat(),
                         "device": args.target,
-                        **data,
+                        **data
                     }
 
                     print(entry)
@@ -135,6 +157,20 @@ def network_log(args):
 
     except KeyboardInterrupt:
         print("\nStopped.")
+
+def clear_faults(args):
+    """Clear PSU faults"""
+
+    try:
+        response = requests.post(
+            f"http://{args.target}/psu-clear-faults",
+            timeout=args.timeout)
+        response.raise_for_status()
+        print("PSU faults cleared")
+        return 0
+    except requests.exceptions.RequestException as e:
+        print(f"Failed to clear PSU faults: {e}", file=sys.stderr)
+        return 1
 
 
 def main():
@@ -156,9 +192,26 @@ Examples:
 
     action = parser.add_mutually_exclusive_group(required=True)
     action.add_argument(
-        "--serial_log",
-        action="store_true",
-        help="Log serial output. Serial connection required!",
+        '--serial_log',
+        action='store_true',
+        help='Log serial output. Serial connection required!'
+    )
+    action.add_argument(
+        '--log',
+        action='store_true',
+        help='Log PSU data'
+    )
+    action.add_argument(
+        '-p', '--polling',
+        type=float,
+        default=1.0,
+        help='Polling time in seconds (default: 1s)'
+    )
+    
+    action.add_argument(
+        '-d', '--discover',
+        action='store_true',
+        help='Discover PSUs on the network via mDNS'
     )
     action.add_argument("--log", action="store_true", help="Log PSU data")
     action.add_argument(
@@ -185,7 +238,17 @@ Examples:
         action="store_true",
         help="Flash firmware to PSU controller (requires STLink connection)",
     )
-    action.add_argument("--clear-faults", action="store_true", help="Clear PSU faults")
+    action.add_argument(
+        '--fan-duty',
+        type=int,
+        help='Set fan duty cycle (0-100, in %). Note that the PSU seems to set a minimum fan duty depending on power level.'
+    )
+    action.add_argument(
+        '--write-reg',
+        nargs=2,
+        metavar=('REG', 'VALUE'),
+        help='Write PMBus register (hex), e.g. --write-reg 0x3A 0x2000'
+    )
 
     parser.add_argument(
         "target",
@@ -212,6 +275,11 @@ Examples:
         default=None,
         help="Build directory for west flash (only for --flash)",
     )
+    parser.add_argument(
+        '--clear-faults',
+        action='store_true',
+        help='Clear PSU faults'
+    )
 
     args = parser.parse_args()
 
@@ -227,14 +295,111 @@ Examples:
         if args.target:
             parser.error("--flash does not take a target argument")
         return cmd_flash(args)
+    else:
+        if not args.target:
+            parser.error("target is required for --on, --off, --status, --log, and --clear-faults")
+        timeoutNone = False
+        if args.timeout is None:
+            args.timeout = 5.0
+            timeoutNone = True
 
-    if not args.target:
-        parser.error(
-            "target is required for --on, --off, --status, --log, and --clear-faults"
-        )
+        psu = PSUController(hostname = args.target, timeout = args.timeout)
 
-    if args.timeout is None:
-        args.timeout = 5.0
+        if args.on:
+            try:
+                psu.control_power(state = True)
+                print("PSU output enabled")
+                return 0
+            except requests.exceptions.RequestException as e:
+                print(f"Failed to control PSU: {e}", file=sys.stderr)
+                return 1
+        elif args.off:
+            try:
+                psu.control_power(state = False)
+                print("PSU output disabled")
+                return 0
+            except requests.exceptions.RequestException as e:
+                print(f"Failed to control PSU: {e}", file=sys.stderr)
+                return 1
+        elif args.status:
+            try:
+                if args.json:
+                    data = psu.status(json_output = True)
+                else:
+                    data = psu.status(json_output = False)
+
+                    vout = data.get('vout', 0)
+                    iout = data.get('iout', 0)
+
+                    print(f"PSU Status:")
+                    print(f"  Output:       {'ON' if data.get('output_on') else 'OFF'}")
+                    print(f"  Input:        {data.get('vin', 0):.2f} V")
+                    print(f"  Output:       {vout:.2f} V @ {iout:.3f} A ({iout*vout:.1f} W)")
+                    print(f"  Temperature:  {data.get('temp', 0):.1f} °C")
+                    print(f"  Fan speed:    {data.get('fan_rpm', 0)} RPM")
+                return 0
+            except requests.exceptions.RequestException as e:
+                print(f"Failed to control PSU: {e}", file=sys.stderr)
+                return 1
+        elif args.log:
+            network_log(args)
+        elif args.clear_faults:
+            return clear_faults(args)
+        elif args.fan_duty is not None:
+            reg_str, val_str = "0x3B", f"{args.fan_duty}"
+            try:
+                reg = int(reg_str, 0)
+                value = int(val_str, 0)
+
+                payload = {
+                    "reg": reg,
+                    "value": value
+                }
+
+                response = requests.post(
+                    f"http://{args.target}/psu-test-register",
+                    json=payload,
+                    timeout=args.timeout
+                )
+                response.raise_for_status()
+
+                print(f"Set fan duty cycle to {args.fan_duty}% (reg 0x{reg:02X} = 0x{value:04X})")
+                return 0
+            except requests.exceptions.RequestException as e:
+                print(f"Failed to write register: {e}", file=sys.stderr)
+                return 1
+            except ValueError:
+                print("Invalid fan duty value. Must be an integer between 0 and 100.", file=sys.stderr)
+                return 1
+        elif args.write_reg:
+            reg_str, val_str = args.write_reg
+
+            try:
+                reg = int(reg_str, 0)
+                value = int(val_str, 0)
+
+                payload = {
+                    "reg": reg,
+                    "value": value
+                }
+
+                response = requests.post(
+                    f"http://{args.target}/psu-test-register",
+                    json=payload,
+                    timeout=args.timeout
+                )
+                response.raise_for_status()
+
+                print(f"Wrote reg 0x{reg:02X} = 0x{value:04X}")
+                return 0
+
+            except ValueError:
+                print("Invalid register/value format. Use hex like 0x3A 0x2000", file=sys.stderr)
+                return 1
+            except requests.exceptions.RequestException as e:
+                print(f"Failed to write register: {e}", file=sys.stderr)
+                return 1
+            
 
     psu = PSUController(hostname=args.target, timeout=args.timeout)
 
