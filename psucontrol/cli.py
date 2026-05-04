@@ -4,7 +4,6 @@ Command-line interface for controlling t0-psu boards
 """
 
 import argparse
-import contextlib
 import json
 import os
 import requests
@@ -16,70 +15,25 @@ from datetime import datetime
 import re
 
 
-from zeroconf import ServiceBrowser, ServiceListener, Zeroconf
+from .api import PSUController, discover
 
 from .api import PSUController
-
-
-class PSUListener(ServiceListener):
-    def __init__(self):
-        self.services = {}
-
-    def update_service(self, zc: Zeroconf, type_: str, name: str) -> None:
-        if info := zc.get_service_info(type_, name):
-            instance = name.replace(f'.{type_}', '')
-            self.services[instance] = {
-                'hostname': info.server,
-                'addresses': info.parsed_addresses(),
-                'port': info.port,
-                'properties': info.properties
-            }
-
-    def add_service(self, zc: Zeroconf, type_: str, name: str) -> None:
-        self.update_service(zc, type_, name)
-
-    def remove_service(self, zc: Zeroconf, type_: str, name: str) -> None:
-        instance = name.replace(f'.{type_}', '')
-        if instance in self.services:
-            del self.services[instance]
-
-
-def discover_psus(timeout: float = 1) -> Dict[str, Dict[str, Any]]:
-    """Discover PSUs on the network via mDNS"""
-
-    with contextlib.closing(Zeroconf()) as zc:
-        listener = PSUListener()
-        browser = ServiceBrowser(zc, "_t0-psu._tcp.local.", listener)
-
-        time.sleep(timeout)
-
-        return listener.services.copy()
 
 
 def cmd_discover(args):
     """Discover PSUs on the network"""
     print(f"Discovering PSUs (timeout: {args.timeout}s)...")
-    services = discover_psus(args.timeout)
+    controllers = discover(args.timeout)
 
-    if not services:
+    if not controllers:
         print("No PSUs found")
         return 1
 
-    print(f"\nFound {len(services)} PSU(s):\n")
-    for instance, info in services.items():
-        hostname = info['hostname'].rstrip('.')
-        addr = info['addresses'][0] if info['addresses'] else 'unknown'
-        port = info['port']
+    print(f"\nFound {len(controllers)} PSU(s):\n")
+    for pc in controllers:
+        hostname = pc.hostname
 
-        if port == 80:
-            url = f"http://{hostname}"
-        else:
-            url = f"http://{hostname}:{port}"
-
-        print(f"  {instance}")
-        print(f"    URL:     {url}")
-        print(f"    Address: {addr}")
-        print()
+        print(f"* {pc.hostname} (http://{pc.hostname})")
 
     return 0
 
@@ -90,27 +44,54 @@ def cmd_flash(args):
 
     steps = []
 
-    if not os.path.exists('.west'):
-        steps.append(("Initializing west workspace", ['west', 'init']))
+    if not os.path.exists(".west"):
+        steps.append(("Initializing west workspace", ["west", "init"]))
 
-    steps.extend([
-        ("Updating west workspace", ['west', 'update']),
-        ("Exporting Zephyr environment", ['west', 'zephyr-export']),
-        ("Installing packages", ['west', 'packages', 'pip', '--install']),
-        ("Building firmware", ['west', 'build', '-b', 'nucleo_h723zg', '.']),
-        ("Flashing firmware", ['west', 'flash']),
-    ])
-    
+    steps.extend(
+        [
+            ("Updating west workspace", ["west", "update"]),
+            ("Exporting Zephyr environment", ["west", "zephyr-export"]),
+            ("Installing packages", ["west", "packages", "pip", "--install"]),
+            ("Installing Zephyr SDK", ["west", "sdk", "install", "-t", "arm-zephyr-eabi"]),
+            ("Building firmware", ["west", "build", "-b", "nucleo_h723zg", "."]),
+            ("Flashing firmware", ["west", "flash"]),
+        ]
+    )
+
     for msg, cmd in steps:
         print(f"{msg}...")
-        result = subprocess.run([sys.executable, '-m'] + cmd)
+        result = subprocess.run([sys.executable, "-m"] + cmd)
         if result.returncode != 0:
             print(f"Failed: {msg}", file=sys.stderr)
             if msg == "Building firmware":
-                print(f"For error during 'Building Firmware' --> Note that the working directory is assumed to be the parent `psucontrol` directory.", file=sys.stderr)
+                print(
+                    f"For error during 'Building Firmware' --> Note that the working directory is assumed to be the parent `psucontrol` directory.",
+                    file=sys.stderr,
+                )
             return result.returncode
 
     return 0
+
+
+def serial_log():
+    port = "/dev/ttyACM0"
+    baud = 115200
+
+    # Regex to remove ANSI escape sequences
+    ansi_escape = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
+
+def cmd_flash(args):
+    """Flash firmware to PSU controller"""
+    import subprocess
+
+                except Exception as e:
+                    print(f"Error: raw response: {text},\nerror: {e}")
+
+                interval = 1 / args.polling
+                time.sleep(interval)
+
+    except KeyboardInterrupt:
+        print("\nStopped.")
 
 def serial_log():
     port = "/dev/ttyACM0"
@@ -193,8 +174,10 @@ def clear_faults(args):
 
 
 def main():
+    sys.excepthook = lambda typ, val, tb: print(f"Error: {val}", file=sys.stderr)
+
     parser = argparse.ArgumentParser(
-        description='Command-line interface for controlling t0-psu boards',
+        description="Command-line interface for controlling t0-psu boards",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -204,7 +187,7 @@ Examples:
   %(prog)s 192.168.10.13 -s
   %(prog)s http://192.168.10.13 --status --json
   %(prog)s --flash
-        """.strip()
+        """.strip(),
     )
 
     action = parser.add_mutually_exclusive_group(required=True)
@@ -230,25 +213,30 @@ Examples:
         action='store_true',
         help='Discover PSUs on the network via mDNS'
     )
+    action.add_argument("--log", action="store_true", help="Log PSU data")
     action.add_argument(
-        '--on',
-        action='store_true',
-        help='Turn PSU output on'
+        "-p",
+        "--polling",
+        type=float,
+        default=1.0,
+        help="Polling time in seconds (default: 1s)",
+    )
+
+    action.add_argument(
+        "-d",
+        "--discover",
+        action="store_true",
+        help="Discover PSUs on the network via mDNS",
+    )
+    action.add_argument("--on", action="store_true", help="Turn PSU output on")
+    action.add_argument("--off", action="store_true", help="Turn PSU output off")
+    action.add_argument(
+        "-s", "--status", action="store_true", help="Get PSU status and telemetry"
     )
     action.add_argument(
-        '--off',
-        action='store_true',
-        help='Turn PSU output off'
-    )
-    action.add_argument(
-        '-s', '--status',
-        action='store_true',
-        help='Get PSU status and telemetry'
-    )
-    action.add_argument(
-        '--flash',
-        action='store_true',
-        help='Flash firmware to PSU controller (requires STLink connection)'
+        "--flash",
+        action="store_true",
+        help="Flash firmware to PSU controller (requires STLink connection)",
     )
     action.add_argument(
         '--fan-duty',
@@ -263,27 +251,29 @@ Examples:
     )
 
     parser.add_argument(
-        'target',
-        nargs='?',
-        help='PSU target (hostname, IP, or URL) - not needed for --discover or --flash'
+        "target",
+        nargs="?",
+        help="PSU target (hostname, IP, or URL) - not needed for --discover or --flash",
     )
 
     parser.add_argument(
-        '-t', '--timeout',
+        "-t",
+        "--timeout",
         type=float,
         default=None,
-        help='Request timeout in seconds (default: 1s for discover, 5s for other operations)'
+        help="Request timeout in seconds (default: 1s for discover, 5s for other operations)",
     )
     parser.add_argument(
-        '-j', '--json',
-        action='store_true',
-        help='Output raw JSON instead of formatted text (only for --status)'
+        "-j",
+        "--json",
+        action="store_true",
+        help="Output raw JSON instead of formatted text (only for --status)",
     )
     parser.add_argument(
-        '--build-dir',
+        "--build-dir",
         type=str,
         default=None,
-        help='Build directory for west flash (only for --flash)'
+        help="Build directory for west flash (only for --flash)",
     )
     parser.add_argument(
         '--clear-faults',
@@ -411,8 +401,28 @@ Examples:
                 return 1
             
 
-    return 1
+    psu = PSUController(hostname=args.target, timeout=args.timeout)
 
+    if args.on or args.off:
+        psu.set_power(args.on)
 
-if __name__ == "__main__":
-    sys.exit(main())
+    elif args.status:
+        data = psu.get_status()
+        if args.json:
+            print(json.dumps(data, indent=2))
+        else:
+            vout = data.get("vout", 0)
+            iout = data.get("iout", 0)
+
+            print(f"PSU Status:")
+            print(f"  Output:       {'ON' if data.get('output_on') else 'OFF'}")
+            print(f"  Input:        {data.get('vin', 0):.2f} V")
+            print(f"  Output:       {vout:.2f} V @ {iout:.3f} A ({iout*vout:.1f} W)")
+            print(f"  Inlet Temp:   {data.get('temp_inlet', 0):.1f} °C")
+            print(f"  Outlet Temp:  {data.get('temp_outlet', 0):.1f} °C")
+            print(f"  Fan speed:    {data.get('fan_rpm', 0)} RPM")
+
+    elif args.log:
+        network_log(args)
+    elif args.clear_faults:
+        return psu.clear_faults()
