@@ -10,9 +10,10 @@ import zeroconf
 
 
 class PSUController:
-    def __init__(self, hostname: str, timeout: float = 1):
+    def __init__(self, hostname: str, timeout: float = 1, address: str = None):
         self.hostname = hostname
         self.timeout = timeout
+        self.address = address
 
     def _post(self, method, **kwargs):
         response = requests.post(
@@ -71,5 +72,9 @@ def discover(timeout: float = 1) -> list[PSUController]:
 
         cs = []
         for instance, info in listener.services.items():
-            cs.append(PSUController(hostname=info["hostname"].rstrip(".")))
+            cs.append(PSUController(
+                hostname=info["hostname"].rstrip("."), 
+                address=info["addresses"][0] if info["addresses"] else None,
+                )
+            )
         return cs

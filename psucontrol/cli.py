@@ -27,9 +27,10 @@ def cmd_discover(args):
 
     print(f"\nFound {len(controllers)} PSU(s):\n")
     for pc in controllers:
-        hostname = pc.hostname
-
-        print(f"* {pc.hostname} (http://{pc.hostname})")
+        print(f"* {pc.hostname}")
+        print(f"    URL:     http://{pc.hostname}")
+        print(f"    Address: {pc.address}")
+        print()
 
     return 0
 
